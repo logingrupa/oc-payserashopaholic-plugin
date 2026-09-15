@@ -79,19 +79,24 @@ final class PayseraCallbackTest extends TestCase
         $this->assertSame('777', PayseraCallback::parse($arQuery, self::PASSWORD, $this->sPublicKey)['orderid']);
     }
 
-    public function test_ss1_alone_is_enough_when_paysera_sends_no_rsa_signature(): void
+    public function test_ss1_alone_is_refused(): void
     {
         $arQuery = $this->signedQuery(['orderid' => '777'], []);
 
-        $this->assertSame('777', PayseraCallback::parse($arQuery, self::PASSWORD, null)['orderid']);
+        try {
+            PayseraCallback::parse($arQuery, self::PASSWORD, $this->sPublicKey);
+            $this->fail('expected rejection');
+        } catch (PayseraCallbackException $obException) {
+            $this->assertSame(403, $obException->getCode());
+        }
     }
 
     public function test_wrong_password_rejects_ss1_with_403(): void
     {
-        $arQuery = $this->signedQuery(['orderid' => '777'], [], 'other-password');
+        $arQuery = $this->signedQuery(['orderid' => '777'], ['ss3'], 'other-password');
 
         try {
-            PayseraCallback::parse($arQuery, self::PASSWORD, null);
+            PayseraCallback::parse($arQuery, self::PASSWORD, $this->sPublicKey);
             $this->fail('expected rejection');
         } catch (PayseraCallbackException $obException) {
             $this->assertSame(403, $obException->getCode());

@@ -59,6 +59,30 @@ final class PayseraRequestTest extends TestCase
         PayseraRequest::encodeData($arParams);
     }
 
+    public function test_long_return_url_throws(): void
+    {
+        $arParams = $this->params();
+        $arParams['accepturl'] = 'https://nc.test/' . str_repeat('a', PayseraRequest::URL_MAX_LENGTH);
+
+        $this->expectException(InvalidArgumentException::class);
+        PayseraRequest::encodeData($arParams);
+    }
+
+    public function test_free_text_is_cut_to_the_limit(): void
+    {
+        $arParams = $this->params();
+        $arParams['p_firstname'] = str_repeat('ā', PayseraRequest::TEXT_MAX_LENGTH + 5);
+
+        parse_str(PayseraRequest::base64UrlDecode(PayseraRequest::encodeData($arParams)), $arData);
+
+        $this->assertSame(PayseraRequest::TEXT_MAX_LENGTH, mb_strlen($arData['p_firstname']));
+    }
+
+    public function test_strict_decode_rejects_garbage(): void
+    {
+        $this->assertSame('', PayseraRequest::base64UrlDecode('not base64!'));
+    }
+
     public function test_base64url_round_trip_is_url_safe(): void
     {
         $sRaw = random_bytes(96);

@@ -20,6 +20,7 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
 {
     const CODE = 'Paysera';
     const CALLBACK_URL = 'paysera/callback';
+    const PAID_MARKER = 'paid_at';
 
     // Same event names as Lovata.OmnipayShopaholic so the storeextender and
     // retrypayment listeners resolve the order page for Paysera too.
@@ -70,11 +71,12 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
         $sRejectReason = $this->getCallbackRejectReason($arData);
         if ($sRejectReason !== null) {
             Log::error('Paysera callback rejected: ' . $sRejectReason, ['order_id' => $this->obOrder->id, 'data' => $arData]);
+            $this->storeCallback($arData, 'rejected_callback', $sRejectReason);
 
             return Response::make($sRejectReason, 400);
         }
 
-        $this->storeCallback($arData);
+        $this->storeCallback($arData, 'callback');
         $this->applyCallbackStatus((string) ($arData['status'] ?? ''));
 
         return Response::make('OK');
@@ -226,10 +228,7 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
             return 'Test callback on a live payment method';
         }
 
-        // payamount/paycurrency are what was actually paid, present when they differ from the request
-        $iPaid = (int) ($arData['payamount'] ?? $arData['amount'] ?? 0);
-        $sPaidCurrency = (string) ($arData['paycurrency'] ?? $arData['currency'] ?? '');
-        if ($iPaid !== (int) ($arRequest['amount'] ?? 0) || $sPaidCurrency !== (string) ($arRequest['currency'] ?? '')) {
+        if (!$this->isPaidAmountMatching($arData, $arRequest)) {
             return 'Amount or currency mismatch';
         }
 
@@ -237,36 +236,73 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
     }
 
     /**
-     * @param array $arData
+     * Paysera's own rule (lib-checkout-sdk-facade): the requested pair or the paid
+     * pair must equal what the merchant asked for.
+     * @param array $arData    callback parameters
+     * @param array $arRequest request stored at purchase time
+     * @return bool
      */
-    protected function storeCallback(array $arData)
+    protected function isPaidAmountMatching(array $arData, array $arRequest): bool
+    {
+        $iExpectedAmount = (int) ($arRequest['amount'] ?? 0);
+        $sExpectedCurrency = (string) ($arRequest['currency'] ?? '');
+
+        foreach ([['amount', 'currency'], ['payamount', 'paycurrency']] as [$sAmountKey, $sCurrencyKey]) {
+            if (!isset($arData[$sAmountKey], $arData[$sCurrencyKey])) {
+                continue;
+            }
+
+            if ((int) $arData[$sAmountKey] === $iExpectedAmount && (string) $arData[$sCurrencyKey] === $sExpectedCurrency) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array       $arData
+     * @param string      $sKey    payment_response key
+     * @param string|null $sReason reject reason, stored next to the data
+     */
+    protected function storeCallback(array $arData, string $sKey, ?string $sReason = null)
     {
         $arPaymentResponse = (array) $this->obOrder->payment_response;
-        $arPaymentResponse['callback'] = $arData;
+        $arPaymentResponse[$sKey] = $sReason === null ? $arData : ['reason' => $sReason, 'data' => $arData];
 
         $this->obOrder->payment_response = $arPaymentResponse;
-        $this->obOrder->payment_token = (string) ($arData['requestid'] ?? '');
+        if ($sReason === null) {
+            $this->obOrder->payment_token = (string) ($arData['requestid'] ?? '');
+        }
         $this->obOrder->save();
     }
 
     /**
-     * Statuses 1 and 3 approve the order (Paysera docs). 0 and 2 mean not executed
-     * yet, a later 1 can still arrive, so nothing changes. 4 means executed without
-     * bank confirmation of the funds, left for a manual check.
+     * Only status 1 approves the order, once: the paid marker survives later status
+     * changes so a retried callback cannot drag a shipped order back. 0, 2 and 3 are
+     * not a payment. 4 (funds unconfirmed) and 5 (refunded) need a manual look.
      * @param string $sStatus Paysera payment status
      */
     protected function applyCallbackStatus(string $sStatus)
     {
-        if (in_array($sStatus, [PayseraCallback::STATUS_PAID, PayseraCallback::STATUS_ADDITIONAL_INFO], true)) {
-            if ((int) $this->obOrder->status_id !== (int) $this->obPaymentMethod->after_status_id) {
-                $this->setSuccessStatus();
+        $arPaymentResponse = (array) $this->obOrder->payment_response;
+
+        if ($sStatus === PayseraCallback::STATUS_PAID) {
+            if (!empty($arPaymentResponse[self::PAID_MARKER])) {
+                return;
             }
+
+            $this->setSuccessStatus();
+            $arPaymentResponse = (array) $this->obOrder->payment_response;
+            $arPaymentResponse[self::PAID_MARKER] = now()->toDateTimeString();
+            $this->obOrder->payment_response = $arPaymentResponse;
+            $this->obOrder->save();
 
             return;
         }
 
-        if ($sStatus === PayseraCallback::STATUS_EXECUTED_UNCONFIRMED) {
-            Log::warning('Paysera payment executed without bank confirmation, check the funds before completing', ['order_id' => $this->obOrder->id]);
+        if (in_array($sStatus, [PayseraCallback::STATUS_EXECUTED_UNCONFIRMED, PayseraCallback::STATUS_REFUNDED], true)) {
+            Log::warning('Paysera callback needs a manual check', ['order_id' => $this->obOrder->id, 'status' => $sStatus]);
 
             return;
         }

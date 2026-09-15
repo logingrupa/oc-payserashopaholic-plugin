@@ -39,7 +39,15 @@ Root CLAUDE.md governs: Hungarian notation, Tiger-Style, no jQuery.
 - Order status changes only from the callback. Never set success on the accept URL, Paysera
   documents accepturl as untrusted.
 - Status 0 is "not executed yet", not a cancel: a later status 1 for the same order is normal.
-  Statuses 1 and 3 approve, 4 needs a manual funds check. Do not add a cancel path on 0.
+  Only status 1 approves (the docs sample also approves on 3, no Paysera plugin does, so
+  neither do we). 4 and 5 log a warning. Do not add a cancel path on 0.
+- Idempotency is the paid_at marker in payment_response, not a status compare: a retried
+  callback after the order moved to shipped must not fire setSuccessStatus again.
+- Amount rule: amount/currency OR payamount/paycurrency must equal the stored request
+  (Paysera checkout SDK facade isMerchantOrderPaid). Preferring payamount alone rejected
+  currency-converted payments.
+- Paysera's public.key is an X.509 certificate, openssl_pkey_get_public accepts it. Expires
+  2027-02-05; the refetch-on-failure path covers the rotation.
 - Spec validated 2026-09-15 against developers.paysera.com/guides/checkout-classic and
   lib-webtopay 3.1.6 (three parallel validators). Re-check there, the old
   /en/checkout/integrations/... spec URLs are gone (404).

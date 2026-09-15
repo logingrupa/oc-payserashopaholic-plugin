@@ -6,8 +6,9 @@ use Cache;
  * Decodes and verifies a Paysera callback, mirroring paysera/lib-webtopay 3.1:
  * signed mode carries `data` plus ss1/ss2/ss3, encrypted mode carries only `data`
  * as AES-256-GCM keyed by the project password. The strongest RSA signature
- * present (ss3 SHA-256, else ss2 SHA-1) is verified with the Paysera public key,
- * ss1 (md5 with the password) is always required in signed mode.
+ * present (ss3 SHA-256, else ss2 SHA-1) is verified with the Paysera public key
+ * and ss1 (md5 with the password) is required as well. Paysera always sends an
+ * RSA signature in signed mode, so ss1 alone is refused like the library does.
  */
 class PayseraCallback
 {
@@ -29,6 +30,7 @@ class PayseraCallback
     const STATUS_PENDING = '2';
     const STATUS_ADDITIONAL_INFO = '3';
     const STATUS_EXECUTED_UNCONFIRMED = '4';
+    const STATUS_REFUNDED = '5';
 
     const TYPE_MACRO = 'macro';
 
@@ -114,10 +116,11 @@ class PayseraCallback
             }
 
             self::assertRsaSignature($sData, (string) $arQuery[$sField], $iAlgo, $sField, $sPublicKey);
-            break;
+
+            return self::decode($sData);
         }
 
-        return self::decode($sData);
+        throw new PayseraCallbackException('Paysera callback is missing the ss2 or ss3 signature', 403);
     }
 
     /**
@@ -155,7 +158,8 @@ class PayseraCallback
 
         $obContext = stream_context_create(['http' => ['timeout' => 5]]);
         $sBody = @file_get_contents(self::PUBLIC_KEY_URL, false, $obContext);
-        if (!is_string($sBody) || !str_contains($sBody, '-----BEGIN')) {
+        // Paysera serves an X.509 certificate; openssl accepts it as a public key
+        if (!is_string($sBody) || openssl_pkey_get_public($sBody) === false) {
             return null;
         }
 
