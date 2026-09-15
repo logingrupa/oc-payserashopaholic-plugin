@@ -5,11 +5,11 @@ use Event;
 use Log;
 use Response;
 use InvalidArgumentException;
-use RuntimeException;
 use Illuminate\Http\Response as HttpResponse;
-use Lovata\OrdersShopaholic\Models\Order;
+use Lovata\OrdersShopaholic\Models\PaymentMethod;
 use Lovata\OrdersShopaholic\Classes\Helper\AbstractPaymentGateway;
 use Logingrupa\PayseraShopaholic\Classes\Api\PayseraCallback;
+use Logingrupa\PayseraShopaholic\Classes\Api\PayseraCallbackException;
 use Logingrupa\PayseraShopaholic\Classes\Api\PayseraRequest;
 
 /**
@@ -59,21 +59,12 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
      */
     public function processCallback(array $arQuery): HttpResponse
     {
-        $arUnverified = PayseraCallback::decode((string) ($arQuery['data'] ?? ''));
-        $this->initOrderObject((int) ($arUnverified['orderid'] ?? 0));
-
-        if (empty($this->obOrder) || empty($this->obPaymentMethod) || $this->obPaymentMethod->gateway_id !== self::CODE) {
-            Log::warning('Paysera callback for unknown order', ['orderid' => $arUnverified['orderid'] ?? null]);
-
-            return Response::make('Unknown order', 404);
-        }
-
         try {
-            $arData = PayseraCallback::parse($arQuery, (string) $this->getGatewayProperty('password'), PayseraCallback::publicKey());
-        } catch (RuntimeException $obException) {
-            Log::warning($obException->getMessage(), ['order_id' => $this->obOrder->id]);
+            $arData = $this->resolveCallbackData($arQuery);
+        } catch (PayseraCallbackException $obException) {
+            Log::warning($obException->getMessage(), ['order_id' => $this->obOrder->id ?? null]);
 
-            return Response::make('Invalid signature', 403);
+            return Response::make($obException->getMessage(), $obException->getCode());
         }
 
         $sRejectReason = $this->getCallbackRejectReason($arData);
@@ -168,6 +159,54 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
     }
 
     /**
+     * Load the order and return the verified callback parameters. Signed mode reads
+     * the order id before verifying so the order's own password is used. Encrypted
+     * mode needs the password first, so every Paysera method's password is tried.
+     * @param array $arQuery
+     * @return array
+     * @throws PayseraCallbackException
+     */
+    protected function resolveCallbackData(array $arQuery): array
+    {
+        $sData = (string) ($arQuery['data'] ?? '');
+
+        if (PayseraCallback::isSigned($arQuery)) {
+            $this->loadCallbackOrder(PayseraCallback::decode($sData));
+
+            return PayseraCallback::parse($arQuery, (string) $this->getGatewayProperty('password'));
+        }
+
+        $obMethodList = PaymentMethod::where('gateway_id', self::CODE)->get();
+        foreach ($obMethodList as $obMethod) {
+            $arData = PayseraCallback::decrypt($sData, (string) array_get((array) $obMethod->gateway_property, 'password'));
+            if ($arData === null) {
+                continue;
+            }
+
+            $this->loadCallbackOrder($arData);
+
+            return $arData;
+        }
+
+        throw new PayseraCallbackException('Paysera callback data decryption failed', 403);
+    }
+
+    /**
+     * @param array $arData callback parameters, verified or not
+     * @throws PayseraCallbackException when the order is not a Paysera order
+     */
+    protected function loadCallbackOrder(array $arData)
+    {
+        $this->initOrderObject((int) ($arData['orderid'] ?? 0));
+
+        if (empty($this->obOrder) || empty($this->obPaymentMethod) || $this->obPaymentMethod->gateway_id !== self::CODE) {
+            $this->obOrder = null;
+
+            throw new PayseraCallbackException('Unknown order', 404);
+        }
+    }
+
+    /**
      * @param array $arData verified callback parameters
      * @return string|null reason text, null when the callback is acceptable
      */
@@ -179,7 +218,7 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
             return 'Project id mismatch';
         }
 
-        if (($arData['type'] ?? '') !== PayseraCallback::TYPE_MACRO) {
+        if (($arData['type'] ?? PayseraCallback::TYPE_MACRO) !== PayseraCallback::TYPE_MACRO) {
             return 'Unsupported callback type';
         }
 
@@ -187,9 +226,10 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
             return 'Test callback on a live payment method';
         }
 
-        if ((int) ($arData['amount'] ?? 0) !== (int) ($arRequest['amount'] ?? 0)
-            || ($arData['currency'] ?? '') !== ($arRequest['currency'] ?? '')
-        ) {
+        // payamount/paycurrency are what was actually paid, present when they differ from the request
+        $iPaid = (int) ($arData['payamount'] ?? $arData['amount'] ?? 0);
+        $sPaidCurrency = (string) ($arData['paycurrency'] ?? $arData['currency'] ?? '');
+        if ($iPaid !== (int) ($arRequest['amount'] ?? 0) || $sPaidCurrency !== (string) ($arRequest['currency'] ?? '')) {
             return 'Amount or currency mismatch';
         }
 
@@ -210,22 +250,23 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
     }
 
     /**
+     * Statuses 1 and 3 approve the order (Paysera docs). 0 and 2 mean not executed
+     * yet, a later 1 can still arrive, so nothing changes. 4 means executed without
+     * bank confirmation of the funds, left for a manual check.
      * @param string $sStatus Paysera payment status
      */
     protected function applyCallbackStatus(string $sStatus)
     {
-        if ($sStatus === PayseraCallback::STATUS_PAID) {
-            if ((int) $this->obOrder->status_id === (int) $this->obPaymentMethod->after_status_id) {
-                return;
+        if (in_array($sStatus, [PayseraCallback::STATUS_PAID, PayseraCallback::STATUS_ADDITIONAL_INFO], true)) {
+            if ((int) $this->obOrder->status_id !== (int) $this->obPaymentMethod->after_status_id) {
+                $this->setSuccessStatus();
             }
-
-            $this->setSuccessStatus();
 
             return;
         }
 
-        if ($sStatus === PayseraCallback::STATUS_NOT_EXECUTED) {
-            $this->setCancelStatus();
+        if ($sStatus === PayseraCallback::STATUS_EXECUTED_UNCONFIRMED) {
+            Log::warning('Paysera payment executed without bank confirmation, check the funds before completing', ['order_id' => $this->obOrder->id]);
 
             return;
         }

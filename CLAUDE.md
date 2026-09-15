@@ -12,7 +12,8 @@ README.md documents setup and the callback contract.
 ## Architecture map
 
 - classes/api/     PayseraRequest (data encoding, SS1 sign, redirect URL),
-                   PayseraCallback (decode, SS1 + SS2 verify, public key cache)
+                   PayseraCallback (decode, SS1 + SS3/SS2 verify, AES-GCM encrypted mode,
+                   public key cache), PayseraCallbackException (HTTP code in getCode())
 - classes/helper/  PayseraPaymentGateway (AbstractPaymentGateway: purchase + processCallback)
 - classes/event/   ExtendFieldHandler (Gateway tab fields), PaymentMethodModelHandler
                    (gateway list, gateway class, validation rules)
@@ -37,6 +38,11 @@ Root CLAUDE.md governs: Hungarian notation, Tiger-Style, no jQuery.
 
 - Order status changes only from the callback. Never set success on the accept URL, Paysera
   documents accepturl as untrusted.
+- Status 0 is "not executed yet", not a cancel: a later status 1 for the same order is normal.
+  Statuses 1 and 3 approve, 4 needs a manual funds check. Do not add a cancel path on 0.
+- Spec validated 2026-09-15 against developers.paysera.com/guides/checkout-classic and
+  lib-webtopay 3.1.6 (three parallel validators). Re-check there, the old
+  /en/checkout/integrations/... spec URLs are gone (404).
 - The callback route trusts nothing before the signature check except the orderid needed to
   find the password. Keep that order: decode, load order, verify, then act.
 - Amount check compares against payment_data['request'] stored at purchase time, not the

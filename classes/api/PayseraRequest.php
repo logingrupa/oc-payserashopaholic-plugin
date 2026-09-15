@@ -9,7 +9,7 @@ use InvalidArgumentException;
 class PayseraRequest
 {
     const PAY_URL = 'https://bank.paysera.com/pay/';
-    const API_VERSION = '1.6';
+    const API_VERSION = '1.8';
     const ORDER_ID_MAX_LENGTH = 40;
     const REQUIRED_PARAM_LIST = ['projectid', 'orderid', 'accepturl', 'cancelurl', 'callbackurl'];
 
