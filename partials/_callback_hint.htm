@@ -1,0 +1,13 @@
+<?php
+use Logingrupa\PayseraShopaholic\Classes\Helper\PayseraPaymentGateway;
+?>
+<div class="callout callout-info no-subheader">
+    <div class="header">
+        <i class="icon-info"></i>
+        <h3><?= e(trans('logingrupa.payserashopaholic::lang.hint.callback_title')) ?></h3>
+    </div>
+    <div class="content">
+        <p><?= e(trans('logingrupa.payserashopaholic::lang.hint.callback_text')) ?></p>
+        <p><code><?= e(url(PayseraPaymentGateway::CALLBACK_URL)) ?></code></p>
+    </div>
+</div>

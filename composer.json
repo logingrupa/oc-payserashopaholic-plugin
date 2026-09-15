@@ -1,0 +1,33 @@
+{
+    "name": "logingrupa/oc-payserashopaholic-plugin",
+    "type": "october-plugin",
+    "description": "Paysera (WebToPay) payment gateway for Lovata OrdersShopaholic on October CMS.",
+    "keywords": [
+        "octobercms",
+        "october",
+        "shopaholic",
+        "paysera",
+        "webtopay",
+        "payment"
+    ],
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Logingrupa",
+            "homepage": "https://github.com/logingrupa"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "ext-openssl": "*",
+        "composer/installers": "~1.0 || ~2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Logingrupa\\PayseraShopaholic\\": "."
+        }
+    },
+    "extra": {
+        "installer-name": "payserashopaholic"
+    }
+}
