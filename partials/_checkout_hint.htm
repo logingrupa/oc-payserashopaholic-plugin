@@ -1,0 +1,14 @@
+<?php
+use Logingrupa\PayseraShopaholic\Classes\Helper\PayseraCheckoutPaymentGateway;
+?>
+<div class="callout callout-info no-subheader">
+    <div class="header">
+        <i class="icon-info"></i>
+        <h3><?= e(trans('logingrupa.payserashopaholic::lang.hint.checkout_title')) ?></h3>
+    </div>
+    <div class="content">
+        <p><?= e(trans('logingrupa.payserashopaholic::lang.hint.checkout_text')) ?></p>
+        <p><code><?= e(url(PayseraCheckoutPaymentGateway::WEBHOOK_URL)) ?></code></p>
+        <p><?= e(trans('logingrupa.payserashopaholic::lang.hint.checkout_test_mode')) ?></p>
+    </div>
+</div>

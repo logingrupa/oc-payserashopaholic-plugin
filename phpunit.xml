@@ -9,6 +9,9 @@
         <testsuite name="PayseraShopaholic Unit Tests">
             <directory>./tests/Unit</directory>
         </testsuite>
+        <testsuite name="PayseraShopaholic Feature Tests">
+            <directory>./tests/Feature</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

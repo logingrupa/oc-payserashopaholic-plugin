@@ -1,31 +1,23 @@
 <?php namespace Logingrupa\PayseraShopaholic\Classes\Helper;
 
 use App;
-use Event;
 use Log;
 use Response;
 use InvalidArgumentException;
 use Illuminate\Http\Response as HttpResponse;
 use Lovata\OrdersShopaholic\Models\PaymentMethod;
-use Lovata\OrdersShopaholic\Classes\Helper\AbstractPaymentGateway;
 use Logingrupa\PayseraShopaholic\Classes\Api\PayseraCallback;
 use Logingrupa\PayseraShopaholic\Classes\Api\PayseraCallbackException;
 use Logingrupa\PayseraShopaholic\Classes\Api\PayseraRequest;
 
 /**
- * Shopaholic payment gateway for Paysera. Purchase builds a signed redirect,
+ * Checkout Classic (WebToPay) gateway. Purchase builds a signed redirect,
  * the callback marks the order paid. The accept URL never changes order status.
  */
-class PayseraPaymentGateway extends AbstractPaymentGateway
+class PayseraPaymentGateway extends AbstractPayseraGateway
 {
     const CODE = 'Paysera';
     const CALLBACK_URL = 'paysera/callback';
-    const PAID_MARKER = 'paid_at';
-
-    // Same event names as Lovata.OmnipayShopaholic so the storeextender and
-    // retrypayment listeners resolve the order page for Paysera too.
-    const EVENT_GET_RETURN_URL = 'shopaholic.payment_method.omnipay.gateway.return_url';
-    const EVENT_GET_CANCEL_URL = 'shopaholic.payment_method.omnipay.gateway.cancel_url';
 
     // Site locale to Paysera interface language (ISO 639-2/B)
     const LANG_MAP = [
@@ -34,24 +26,6 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
         'ru' => 'RUS',
         'en' => 'ENG',
     ];
-
-    protected string $sRedirectURL = '';
-    protected string $sMessage = '';
-
-    public function getResponse(): array
-    {
-        return [];
-    }
-
-    public function getRedirectURL(): string
-    {
-        return $this->sRedirectURL;
-    }
-
-    public function getMessage(): string
-    {
-        return $this->sMessage;
-    }
 
     /**
      * Handle the Paysera callback request.
@@ -77,6 +51,8 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
         }
 
         $this->storeCallback($arData, 'callback');
+        $this->obOrder->payment_token = (string) ($arData['requestid'] ?? '');
+        $this->obOrder->save();
         $this->applyCallbackStatus((string) ($arData['status'] ?? ''));
 
         return Response::make('OK');
@@ -87,7 +63,7 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
         $this->arPurchaseData = [
             'projectid'   => $this->getGatewayProperty('project_id'),
             'orderid'     => (string) $this->obOrder->id,
-            'amount'      => (int) round($this->obOrder->total_price_data->price_with_tax_value * 100),
+            'amount'      => $this->getOrderAmountInCents(),
             'currency'    => $this->obPaymentMethod->gateway_currency,
             'accepturl'   => $this->resolveUrl(self::EVENT_GET_RETURN_URL),
             'cancelurl'   => $this->resolveUrl(self::EVENT_GET_CANCEL_URL),
@@ -132,32 +108,6 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
         $arPaymentData['request'] = $this->arPurchaseData;
         $this->obOrder->payment_data = $arPaymentData;
         $this->obOrder->save();
-    }
-
-    protected function processPurchaseResponse()
-    {
-        if ($this->sRedirectURL === '') {
-            return;
-        }
-
-        $this->bIsRedirect = true;
-        $this->setWaitPaymentStatus();
-    }
-
-    /**
-     * @param string $sEventName
-     * @return string
-     */
-    protected function resolveUrl(string $sEventName): string
-    {
-        $arEventResult = (array) Event::fire($sEventName, [$this->obOrder, $this->obPaymentMethod]);
-        foreach ($arEventResult as $sURL) {
-            if (!empty($sURL) && is_string($sURL)) {
-                return $sURL;
-            }
-        }
-
-        return url('/');
     }
 
     /**
@@ -261,42 +211,14 @@ class PayseraPaymentGateway extends AbstractPaymentGateway
     }
 
     /**
-     * @param array       $arData
-     * @param string      $sKey    payment_response key
-     * @param string|null $sReason reject reason, stored next to the data
-     */
-    protected function storeCallback(array $arData, string $sKey, ?string $sReason = null)
-    {
-        $arPaymentResponse = (array) $this->obOrder->payment_response;
-        $arPaymentResponse[$sKey] = $sReason === null ? $arData : ['reason' => $sReason, 'data' => $arData];
-
-        $this->obOrder->payment_response = $arPaymentResponse;
-        if ($sReason === null) {
-            $this->obOrder->payment_token = (string) ($arData['requestid'] ?? '');
-        }
-        $this->obOrder->save();
-    }
-
-    /**
-     * Only status 1 approves the order, once: the paid marker survives later status
-     * changes so a retried callback cannot drag a shipped order back. 0, 2 and 3 are
-     * not a payment. 4 (funds unconfirmed) and 5 (refunded) need a manual look.
+     * Only status 1 approves the order, once. 0, 2 and 3 are not a payment.
+     * 4 (funds unconfirmed) and 5 (refunded) need a manual look.
      * @param string $sStatus Paysera payment status
      */
     protected function applyCallbackStatus(string $sStatus)
     {
-        $arPaymentResponse = (array) $this->obOrder->payment_response;
-
         if ($sStatus === PayseraCallback::STATUS_PAID) {
-            if (!empty($arPaymentResponse[self::PAID_MARKER])) {
-                return;
-            }
-
-            $this->setSuccessStatus();
-            $arPaymentResponse = (array) $this->obOrder->payment_response;
-            $arPaymentResponse[self::PAID_MARKER] = now()->toDateTimeString();
-            $this->obOrder->payment_response = $arPaymentResponse;
-            $this->obOrder->save();
+            $this->markPaidOnce();
 
             return;
         }

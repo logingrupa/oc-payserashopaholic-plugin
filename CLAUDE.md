@@ -1,8 +1,10 @@
 # Logingrupa.PayseraShopaholic
 
-Paysera (WebToPay) gateway for Lovata OrdersShopaholic. Namespace Logingrupa\PayseraShopaholic,
-composer package logingrupa/oc-payserashopaholic-plugin. Runs on the .lv and .lt shops.
-README.md documents setup and the callback contract.
+Two Paysera gateways for Lovata OrdersShopaholic: `PayseraCheckout` (Checkout Modern, OAuth2 +
+HMAC webhook, the v2 line) and `Paysera` (Checkout Classic / WebToPay, the v1 line, kept for
+fallback). Namespace Logingrupa\PayseraShopaholic, composer package
+logingrupa/oc-payserashopaholic-plugin. Runs on the .lv and .lt shops. README.md documents
+setup and both callback contracts.
 
 ## Environment
 
@@ -11,15 +13,20 @@ README.md documents setup and the callback contract.
 
 ## Architecture map
 
-- classes/api/     PayseraRequest (data encoding, SS1 sign, redirect URL),
-                   PayseraCallback (decode, SS1 + SS3/SS2 verify, AES-GCM encrypted mode,
-                   public key cache), PayseraCallbackException (HTTP code in getCode())
-- classes/helper/  PayseraPaymentGateway (AbstractPaymentGateway: purchase + processCallback)
-- classes/event/   ExtendFieldHandler (Gateway tab fields), PaymentMethodModelHandler
-                   (gateway list, gateway class, validation rules)
-- routes.php       GET|POST /paysera/callback, CSRF excluded on purpose (signed instead)
-- partials/        callback URL hint on the payment method form
-- tests/Unit       pure PHPUnit, no DB; tests/fixtures holds a throwaway RSA pair
+- classes/api/           Classic: PayseraRequest (data encoding, SS1 sign, redirect URL),
+                         PayseraCallback (decode, SS1 + SS3/SS2 verify, AES-GCM encrypted mode,
+                         public key cache), PayseraCallbackException (HTTP code in getCode())
+- classes/api/checkout/  Modern: PayseraCheckoutClient (token, order, link, get order over the
+                         Laravel Http client), PayseraCheckoutWebhook (HMAC verify, decode),
+                         PayseraCheckoutException
+- classes/helper/        AbstractPayseraGateway (shared: return URLs, callback storage, paid-once
+                         marker), PayseraPaymentGateway (Classic), PayseraCheckoutPaymentGateway
+- classes/event/         ExtendFieldHandler (Gateway tab fields for both), PaymentMethodModelHandler
+                         (gateway list, gateway classes, validation rules)
+- routes.php             GET|POST /paysera/callback (Classic), POST /paysera/checkout/webhook (Modern)
+- partials/              hints on the payment method form
+- tests/Unit             pure PHPUnit, no DB; tests/fixtures holds a throwaway RSA pair
+- tests/Feature          PluginTestCase + Http::fake for the Checkout client
 
 ## Quality gates
 
@@ -48,6 +55,14 @@ Root CLAUDE.md governs: Hungarian notation, Tiger-Style, no jQuery.
   currency-converted payments.
 - Paysera's public.key is an X.509 certificate, openssl_pkey_get_public accepts it. Expires
   2027-02-05; the refetch-on-failure path covers the rotation.
+- Checkout Modern: POST /orders has no idempotency key, a retry creates a second Paysera order,
+  so purchase runs once per Shopaholic order. The webhook is signed with the CLIENT SECRET over
+  the raw body: regenerating the secret in Paysera breaks webhooks already in flight. Retries
+  come 1 h, 5 h, 25 h after a non-2xx; 401 stops them. Answer 200 for anything verified.
+- Test mode for Modern is a per-project toggle in the Paysera portal, no field here; the order
+  create response carries is_test and it is stored in payment_data.checkout.
+- Order create URLs must be https; nc.test is https locally, http://127.0.0.1:8089 (nc-master)
+  is not.
 - Spec validated 2026-09-15 against developers.paysera.com/guides/checkout-classic and
   lib-webtopay 3.1.6 (three parallel validators). Re-check there, the old
   /en/checkout/integrations/... spec URLs are gone (404).
