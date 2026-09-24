@@ -49,7 +49,8 @@ class ExtendFieldHandler extends AbstractBackendFieldHandler
         return [
             'gateway_property[client_id]'        => $this->field('client_id', 'text', 'left', $arTrigger),
             'gateway_property[client_secret]'    => $this->field('client_secret', 'sensitive', 'right', $arTrigger),
-            'gateway_property[checkout_country]' => $this->field('checkout_country', 'dropdown', 'left', $arTrigger) + ['options' => self::COUNTRY_OPTIONS],
+            'gateway_property[checkout_test_mode]' => $this->field('checkout_test_mode', 'switch', 'left', $arTrigger),
+            'gateway_property[checkout_country]' => $this->field('checkout_country', 'dropdown', 'right', $arTrigger) + ['options' => self::COUNTRY_OPTIONS],
             'paysera_checkout_hint'              => $this->hint('_checkout_hint.htm', $arTrigger),
         ];
     }

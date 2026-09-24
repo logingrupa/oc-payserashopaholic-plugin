@@ -23,6 +23,10 @@ setup and both callback contracts.
                          marker), PayseraPaymentGateway (Classic), PayseraCheckoutPaymentGateway
 - classes/event/         ExtendFieldHandler (Gateway tab fields for both), PaymentMethodModelHandler
                          (gateway list, gateway classes, validation rules)
+- classes/helper/TestModeVisibility + classes/collection/VisiblePaymentMethodCollection +
+  components/PaymentMethodList: test-mode methods hidden at checkout unless BackendAuth::check().
+  The component is registered under the SAME alias "PaymentMethodList" as OrdersShopaholic and wins
+  by dependency load order; if another plugin does the same trick, the last loaded wins.
 - routes.php             GET|POST /paysera/callback (Classic), POST /paysera/checkout/webhook (Modern)
 - partials/              hints on the payment method form
 - tests/Unit             pure PHPUnit, no DB; tests/fixtures holds a throwaway RSA pair

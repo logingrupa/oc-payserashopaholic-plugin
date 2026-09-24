@@ -19,6 +19,10 @@ Paysera merchant portal, Checkout, your project, Integrations, API credentials: 
 2. Fill Client ID, Client Secret, payer country, gateway currency, and the before, success and cancel statuses.
 3. The webhook URL shown on the form (`/paysera/checkout/webhook`) is sent as the callback URL of every order. It must be reachable over HTTPS.
 
+### Test mode switch
+
+With "Test mode" on, the payment method is listed at checkout only for visitors who are logged into the October backend in the same browser. Customers do not see it. That lets you configure the method on the live shop, place a test order and let Paysera review the integration before the option goes public. The same rule applies to the Classic gateway's test mode. Implemented by registering this plugin's `PaymentMethodList` component under the OrdersShopaholic alias; theme templates need no change. Paysera's own test payments are a separate per-project toggle in the Paysera portal.
+
 ### Behaviour
 
 - Purchase creates a Paysera order (reference = shop order id, amount in cents, success, failure, cancel and callback URLs) and then a payment link (one hour lifetime, hosted method picker, site language, order number as purpose, payer name and email). The customer is redirected to the link's payment URL. Paysera order id, link id, test flag, amount and currency are stored on the order.

@@ -4,6 +4,7 @@ use Event;
 use System\Classes\PluginBase;
 use Logingrupa\PayseraShopaholic\Classes\Event\ExtendFieldHandler;
 use Logingrupa\PayseraShopaholic\Classes\Event\PaymentMethodModelHandler;
+use Logingrupa\PayseraShopaholic\Components\PaymentMethodList;
 
 /**
  * Paysera (WebToPay) payment gateway for Lovata OrdersShopaholic.
@@ -31,5 +32,16 @@ class Plugin extends PluginBase
     {
         Event::subscribe(ExtendFieldHandler::class);
         Event::subscribe(PaymentMethodModelHandler::class);
+    }
+
+    /**
+     * Same alias as Lovata.OrdersShopaholic; this plugin registers after it
+     * (dependency order), so the alias resolves to the filtering component.
+     */
+    public function registerComponents()
+    {
+        return [
+            PaymentMethodList::class => 'PaymentMethodList',
+        ];
     }
 }

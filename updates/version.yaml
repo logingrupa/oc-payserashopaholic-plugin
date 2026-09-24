@@ -2,3 +2,5 @@
     - "Paysera payment gateway for OrdersShopaholic: signed GET redirect, verified callback, order page return URLs."
 "2.0.0":
     - "Paysera Checkout (Modern) gateway: OAuth2 client credentials, order plus payment link, hosted payment page, HMAC signed webhook with callback id dedupe. The Classic gateway stays available as a second gateway; both share the paid-once marker and order page URLs."
+"2.1.0":
+    - "Test mode switch on the Checkout gateway. A Paysera method in test mode (Checkout or Classic) is listed at checkout only for visitors logged into the backend, via a PaymentMethodList component override, so the live shop can be tried before customers see the option."
