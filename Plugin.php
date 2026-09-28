@@ -4,6 +4,7 @@ use Event;
 use System\Classes\PluginBase;
 use Logingrupa\PayseraShopaholic\Classes\Event\ExtendFieldHandler;
 use Logingrupa\PayseraShopaholic\Classes\Event\PaymentMethodModelHandler;
+use Logingrupa\PayseraShopaholic\Classes\Helper\TestModeVisibility;
 use Logingrupa\PayseraShopaholic\Components\PaymentMethodList;
 
 /**
@@ -32,6 +33,7 @@ class Plugin extends PluginBase
     {
         Event::subscribe(ExtendFieldHandler::class);
         Event::subscribe(PaymentMethodModelHandler::class);
+        Event::listen('cms.page.init', fn () => TestModeVisibility::rememberQueryFlag());
     }
 
     /**

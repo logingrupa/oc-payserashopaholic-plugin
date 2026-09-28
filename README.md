@@ -21,7 +21,7 @@ Paysera merchant portal, Checkout, your project, Integrations, API credentials: 
 
 ### Test mode switch
 
-With "Test mode" on, the payment method is listed at checkout only for visitors who are logged into the October backend in the same browser. Customers do not see it. That lets you configure the method on the live shop, place a test order and let Paysera review the integration before the option goes public. The same rule applies to the Classic gateway's test mode. Implemented by registering this plugin's `PaymentMethodList` component under the OrdersShopaholic alias; theme templates need no change. Paysera's own test payments are a separate per-project toggle in the Paysera portal.
+With "Test mode" on, the payment method is listed at checkout only for visitors who are logged into the October backend in the same browser. Customers do not see it. A tester without a backend account opens any shop page with `?paysera_test=1`; the method then stays visible for the rest of that browser session, checkout AJAX included, until `?paysera_test=0` or the session ends. The flag is not a secret, so anyone who learns it sees the method too. That lets you configure the method on the live shop, place a test order and let Paysera review the integration before the option goes public. The same rule applies to the Classic gateway's test mode. Implemented by registering this plugin's `PaymentMethodList` component under the OrdersShopaholic alias; theme templates need no change. Paysera's own test payments are a separate per-project toggle in the Paysera portal.
 
 ### Behaviour
 

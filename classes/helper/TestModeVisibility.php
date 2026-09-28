@@ -1,12 +1,15 @@
 <?php namespace Logingrupa\PayseraShopaholic\Classes\Helper;
 
 use BackendAuth;
+use Request;
+use Session;
 use Lovata\OrdersShopaholic\Models\PaymentMethod;
 
 /**
  * A Paysera payment method in test mode is offered at checkout only to visitors
- * who are logged into the October backend, so a project under Paysera review can
- * be exercised on the live shop without customers seeing it.
+ * who are logged into the October backend, or who opened a shop page with
+ * ?paysera_test=1 (kept in their session until ?paysera_test=0), so a project
+ * under Paysera review can be exercised on the live shop without customers seeing it.
  */
 class TestModeVisibility
 {
@@ -16,7 +19,33 @@ class TestModeVisibility
         PayseraCheckoutPaymentGateway::CODE => 'checkout_test_mode',
     ];
 
+    const QUERY_FLAG = 'paysera_test';
+    const SESSION_KEY = 'logingrupa.payserashopaholic.test_visible';
+
     protected static ?array $arHiddenIdList = null;
+
+    /**
+     * Grants (?paysera_test=1) or revokes (?paysera_test=0) test method visibility
+     * for the rest of the session; any other value leaves the session untouched.
+     */
+    public static function rememberQueryFlag(): void
+    {
+        $sFlag = Request::query(self::QUERY_FLAG);
+        if ($sFlag === '1') {
+            Session::put(self::SESSION_KEY, true);
+        } elseif ($sFlag === '0') {
+            Session::forget(self::SESSION_KEY);
+        } else {
+            return;
+        }
+
+        self::reset();
+    }
+
+    public static function canSeeTestMethods(): bool
+    {
+        return BackendAuth::check() || Session::get(self::SESSION_KEY) === true;
+    }
 
     /**
      * @return int[] payment method ids to hide from the current visitor
@@ -27,7 +56,7 @@ class TestModeVisibility
             return self::$arHiddenIdList;
         }
 
-        if (BackendAuth::check()) {
+        if (self::canSeeTestMethods()) {
             return self::$arHiddenIdList = [];
         }
 
