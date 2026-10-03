@@ -5,7 +5,8 @@ use System\Classes\PluginBase;
 use Logingrupa\PayseraShopaholic\Classes\Event\ExtendFieldHandler;
 use Logingrupa\PayseraShopaholic\Classes\Event\PaymentMethodModelHandler;
 use Logingrupa\PayseraShopaholic\Classes\Helper\TestModeVisibility;
-use Logingrupa\PayseraShopaholic\Components\PaymentMethodList;
+use Logingrupa\PayseraShopaholic\Classes\Collection\VisiblePaymentMethodCollection;
+use Lovata\OrdersShopaholic\Classes\Collection\PaymentMethodCollection;
 
 /**
  * Paysera (WebToPay) payment gateway for Lovata OrdersShopaholic.
@@ -29,21 +30,19 @@ class Plugin extends PluginBase
         ];
     }
 
+    /**
+     * Every PaymentMethodCollection the container builds hides test-mode methods from
+     * customers: the checkout method list and the retry payment page.
+     */
+    public function register()
+    {
+        $this->app->bind(PaymentMethodCollection::class, VisiblePaymentMethodCollection::class);
+    }
+
     public function boot()
     {
         Event::subscribe(ExtendFieldHandler::class);
         Event::subscribe(PaymentMethodModelHandler::class);
         Event::listen('cms.page.init', fn () => TestModeVisibility::rememberQueryFlag());
-    }
-
-    /**
-     * Same alias as Lovata.OrdersShopaholic; this plugin registers after it
-     * (dependency order), so the alias resolves to the filtering component.
-     */
-    public function registerComponents()
-    {
-        return [
-            PaymentMethodList::class => 'PaymentMethodList',
-        ];
     }
 }

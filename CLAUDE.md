@@ -23,11 +23,12 @@ setup and both callback contracts.
                          marker), PayseraPaymentGateway (Classic), PayseraCheckoutPaymentGateway
 - classes/event/         ExtendFieldHandler (Gateway tab fields for both), PaymentMethodModelHandler
                          (gateway list, gateway classes, validation rules)
-- classes/helper/TestModeVisibility + classes/collection/VisiblePaymentMethodCollection +
-  components/PaymentMethodList: test-mode methods hidden at checkout unless BackendAuth::check()
-  or the session carries the ?paysera_test=1 grant (cms.page.init listener, ?paysera_test=0 revokes).
-  The component is registered under the SAME alias "PaymentMethodList" as OrdersShopaholic and wins
-  by dependency load order; if another plugin does the same trick, the last loaded wins.
+- classes/helper/TestModeVisibility + classes/collection/VisiblePaymentMethodCollection: test-mode
+  methods hidden unless BackendAuth::check() or the session carries the ?paysera_test=1 grant
+  (cms.page.init listener, ?paysera_test=0 revokes). Plugin::register() binds Lovata's
+  PaymentMethodCollection to the visible one; Lovata builds collections via app()->make(static::class),
+  so the checkout list and RetrypaymentShopaholic's method list both hide test methods (since 2.3.0,
+  the old PaymentMethodList component override is gone).
 - routes.php             GET|POST /paysera/callback (Classic), POST /paysera/checkout/webhook (Modern)
 - partials/              hints on the payment method form
 - tests/Unit             pure PHPUnit, no DB; tests/fixtures holds a throwaway RSA pair

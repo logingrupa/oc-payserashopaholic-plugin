@@ -6,3 +6,5 @@
     - "Test mode switch on the Checkout gateway. A Paysera method in test mode (Checkout or Classic) is listed at checkout only for visitors logged into the backend, via a PaymentMethodList component override, so the live shop can be tried before customers see the option."
 "2.2.0":
     - "Test mode visibility for testers without a backend account: opening any shop page with ?paysera_test=1 shows test-mode Paysera methods for the rest of the session, ?paysera_test=0 hides them again."
+"2.3.0":
+    - "Test-mode methods are hidden through a container binding of the Lovata payment method collection instead of a PaymentMethodList component override, so every collection caller hides them, the retry payment page included."
